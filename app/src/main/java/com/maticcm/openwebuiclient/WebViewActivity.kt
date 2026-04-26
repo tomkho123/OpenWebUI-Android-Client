@@ -99,7 +99,7 @@ class WebViewActivity : AppCompatActivity() {
     private var pendingMicrophoneAccess = false
 
     // Offline cache & Service
-    private lateinit var offlineCache: OfflineCacheDatabase
+    private var offlineCache: OfflineCacheDatabase? = null
     private var isServiceBound = false
     private var foregroundService: WebViewForegroundService? = null
     private val serviceConnection = object : android.content.ServiceConnection {
@@ -222,19 +222,24 @@ class WebViewActivity : AppCompatActivity() {
         binding = ActivityWebviewBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Initialize offline cache database
-        offlineCache = OfflineCacheDatabase(this)
-
         // Get the saved URL FIRST
         baseUrl = getSharedPreferences("AppPrefs", MODE_PRIVATE)
             .getString("SAVED_URL", null) ?: return
 
-        // Start foreground service for background connection (AFTER baseUrl is set)
+        // Initialize offline cache database (try-catch to prevent crashes)
         try {
-            WebViewForegroundService.startService(this, baseUrl)
+            offlineCache = OfflineCacheDatabase(this)
         } catch (e: Exception) {
-            Log.e("WebViewActivity", "Error starting foreground service", e)
+            Log.e("WebViewActivity", "Error initializing database", e)
         }
+
+        // Start foreground service for background connection (AFTER baseUrl is set)
+        // DISABLED TEMPORARILY to prevent crashes
+        // try {
+        //     WebViewForegroundService.startService(this, baseUrl)
+        // } catch (e: Exception) {
+        //     Log.e("WebViewActivity", "Error starting foreground service", e)
+        // }
 
         // Register network change receiver
         registerNetworkChangeReceiver()
@@ -261,45 +266,24 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     private fun setupWebView() {
-        binding.webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            setSupportMultipleWindows(true)
-            allowContentAccess = true
-            allowFileAccess = true
-            loadWithOverviewMode = true
-            useWideViewPort = true
-            setSupportZoom(true)
-            builtInZoomControls = true
-            displayZoomControls = false
+        try {
+            binding.webView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                loadWithOverviewMode = true
+                useWideViewPort = true
 
-            // Enhanced cache settings for offline support
-            cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-            setDomStorageEnabled(true)
+                // Cache settings
+                cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
 
-            // Note: These settings are deprecated but still needed for some functionality
-            @Suppress("DEPRECATION")
-            allowFileAccessFromFileURLs = true
-            @Suppress("DEPRECATION")
-            allowUniversalAccessFromFileURLs = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            @Suppress("DEPRECATION")
-            allowContentAccess = true
-            @Suppress("DEPRECATION")
-            allowFileAccess = true
-            @Suppress("DEPRECATION")
-            setAllowFileAccess(true)
-            @Suppress("DEPRECATION")
-            setAllowContentAccess(true)
-            // Enable media permissions
-            @Suppress("DEPRECATION")
-            mediaPlaybackRequiresUserGesture = false
-        }
-
-        // Enable mixed content for Android 5.0 and above
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            binding.webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                // Mixed content for HTTP/HTTPS
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("WebViewActivity", "Error setting up WebView", e)
         }
 
         // Add JavaScript interface for microphone permission
@@ -1365,6 +1349,6 @@ class WebViewActivity : AppCompatActivity() {
         }
 
         // Clear old cache data periodically (keep 7 days)
-        offlineCache.clearOldData(7)
+        offlineCache?.clearOldData(7)
     }
 } 
