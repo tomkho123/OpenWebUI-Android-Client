@@ -1257,38 +1257,71 @@ class WebViewActivity : AppCompatActivity() {
     private fun injectFontSizeReducer() {
         val javascript = """
             (function() {
-                console.log('[Font Reduction] Starting font size reduction...');
+                console.log('[Font Reduction] Starting AGGRESSIVE font reduction...');
 
-                // Method 1: Create stylesheet with higher specificity
+                // Method 1: Override EVERYTHING with !important
                 const style = document.createElement('style');
                 style.id = 'font-reducer-style';
                 style.innerHTML = `
+                    * {
+                        font-size: 75%% !important;
+                    }
                     html, body {
-                        font-size: 90%% !important;
+                        font-size: 75%% !important;
                     }
                     html *, body * {
-                        font-size: 90%% !important;
+                        font-size: 75%% !important;
                     }
-                    p, span, div, h1, h2, h3, h4, h5, h6, li, a, button, input, textarea {
-                        font-size: 90%% !important;
+                    div, span, p, h1, h2, h3, h4, h5, h6, li, ul, ol, a, button, input, textarea, label, strong, b, i, em, small, code, pre {
+                        font-size: 75%% !important;
+                    }
+                    [class*="message"], [class*="chat"], [class*="text"] {
+                        font-size: 75%% !important;
                     }
                 `;
-                document.head.appendChild(style);
 
-                // Method 2: Direct body style
-                document.body.style.fontSize = '90%%';
-                document.body.style.webkitTextSizeAdjust = '90%%';
+                // Add to head with high priority
+                if (document.head) {
+                    document.head.appendChild(style);
+                }
 
-                // Method 3: Apply to all existing elements
+                // Add to body too
+                if (document.body) {
+                    document.body.appendChild(style.cloneNode(true));
+                }
+
+                // Method 2: Direct style override
+                document.documentElement.style.fontSize = '75%%';
+                document.body.style.fontSize = '75%%';
+
+                // Method 3: Apply to ALL elements inline
                 const allElements = document.querySelectorAll('*');
-                allElements.forEach(el => {
-                    const currentSize = window.getComputedStyle(el).fontSize;
-                    if (currentSize) {
-                        el.style.fontSize = '90%%';
-                    }
+                allElements.forEach((el, index) => {
+                    el.style.setProperty('font-size', '75%%', 'important');
                 });
 
-                console.log('[Font Reduction] Completed. Font size reduced to 90%%');
+                // Method 4: Mutation observer to keep reducing
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === 1) { // Element node
+                                node.style.setProperty('font-size', '75%%', 'important');
+                                // Apply to children too
+                                const children = node.querySelectorAll('*');
+                                children.forEach((child) => {
+                                    child.style.setProperty('font-size', '75%%', 'important');
+                                });
+                            }
+                        });
+                    });
+                });
+
+                observer.observe(document.body || document.documentElement, {
+                    childList: true,
+                    subtree: true
+                });
+
+                console.log('[Font Reduction] Completed. Font size set to 75%%');
             })();
         """.trimIndent()
 
@@ -1296,12 +1329,15 @@ class WebViewActivity : AppCompatActivity() {
             Log.d("WebViewActivity", "Font reduction result: $result")
         }
 
-        // Re-inject after a delay to ensure it applies
-        binding.webView.postDelayed({
-            binding.webView.evaluateJavascript(javascript) { result ->
-                Log.d("WebViewActivity", "Font re-injection result: $result")
-            }
-        }, 500)
+        // Inject multiple times at different intervals
+        val delays = longArrayOf(100, 500, 1000, 2000)
+        delays.forEach { delay ->
+            binding.webView.postDelayed({
+                binding.webView.evaluateJavascript(javascript) { result ->
+                    Log.d("WebViewActivity", "Font re-injection at ${delay}ms: $result")
+                }
+            }, delay)
+        }
     }
 
     private fun registerNetworkChangeReceiver() {
