@@ -15,7 +15,6 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationCompat.ForegroundServiceDefaultBehavior
 import android.util.Log
 
 class WebViewForegroundService : Service() {
@@ -118,7 +117,6 @@ class WebViewForegroundService : Service() {
             .setSmallIcon(R.drawable.ic_connect)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .setForegroundServiceBehavior(ForegroundServiceDefaultBehavior.BLOCKABLE)
             .build()
     }
 

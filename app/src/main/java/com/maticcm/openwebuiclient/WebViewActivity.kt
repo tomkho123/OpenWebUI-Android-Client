@@ -50,6 +50,7 @@ import androidx.core.content.FileProvider
 import java.util.regex.Pattern
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
+import android.os.IBinder
 
 class WebViewActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWebviewBinding
@@ -269,8 +270,6 @@ class WebViewActivity : AppCompatActivity() {
 
             // Enhanced cache settings for offline support
             cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-            setAppCacheEnabled(true)
-            setAppCachePath(cacheDir.absolutePath)
             setDomStorageEnabled(true)
 
             // Note: These settings are deprecated but still needed for some functionality
@@ -1066,12 +1065,6 @@ class WebViewActivity : AppCompatActivity() {
         intent?.let { handleIntent(it) }
     }
 
-    override fun onDestroy() {
-        timeoutHandler.removeCallbacks(timeoutRunnable)
-        binding.webView.destroy()
-        super.onDestroy()
-    }
-
     @Deprecated("Deprecated in Java", ReplaceWith("handleTouchEvent(event)"))
     private fun handleTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
@@ -1343,6 +1336,8 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        timeoutHandler.removeCallbacks(timeoutRunnable)
+        binding.webView.destroy()
         super.onDestroy()
         try {
             unregisterReceiver(networkChangeReceiver)
