@@ -1257,24 +1257,51 @@ class WebViewActivity : AppCompatActivity() {
     private fun injectFontSizeReducer() {
         val javascript = """
             (function() {
-                window.Android.log('Reducing font size by 10%%');
+                console.log('[Font Reduction] Starting font size reduction...');
 
-                // Reduce font size by 10%% for all elements (5%% + 5%% = 10%% total)
+                // Method 1: Create stylesheet with higher specificity
                 const style = document.createElement('style');
+                style.id = 'font-reducer-style';
                 style.innerHTML = `
-                    * {
+                    html, body {
+                        font-size: 90%% !important;
+                    }
+                    html *, body * {
+                        font-size: 90%% !important;
+                    }
+                    p, span, div, h1, h2, h3, h4, h5, h6, li, a, button, input, textarea {
                         font-size: 90%% !important;
                     }
                 `;
                 document.head.appendChild(style);
 
-                // Apply to body as well
+                // Method 2: Direct body style
                 document.body.style.fontSize = '90%%';
+                document.body.style.webkitTextSizeAdjust = '90%%';
 
-                window.Android.log('Font size reduced successfully');
+                // Method 3: Apply to all existing elements
+                const allElements = document.querySelectorAll('*');
+                allElements.forEach(el => {
+                    const currentSize = window.getComputedStyle(el).fontSize;
+                    if (currentSize) {
+                        el.style.fontSize = '90%%';
+                    }
+                });
+
+                console.log('[Font Reduction] Completed. Font size reduced to 90%%');
             })();
         """.trimIndent()
-        binding.webView.evaluateJavascript(javascript, null)
+
+        binding.webView.evaluateJavascript(javascript) { result ->
+            Log.d("WebViewActivity", "Font reduction result: $result")
+        }
+
+        // Re-inject after a delay to ensure it applies
+        binding.webView.postDelayed({
+            binding.webView.evaluateJavascript(javascript) { result ->
+                Log.d("WebViewActivity", "Font re-injection result: $result")
+            }
+        }, 500)
     }
 
     private fun registerNetworkChangeReceiver() {
