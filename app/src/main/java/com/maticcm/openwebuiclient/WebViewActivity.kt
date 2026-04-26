@@ -453,9 +453,17 @@ class WebViewActivity : AppCompatActivity() {
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                if (url?.startsWith(baseUrl) == true) {
-                    return false
+                // Extract base URL (scheme + host + port) to compare
+                val baseUri = Uri.parse(baseUrl)
+                val urlUri = Uri.parse(url)
+
+                // Check if same host - allow all navigation within same domain
+                val sameHost = urlUri?.host == baseUri?.host
+                if (sameHost) {
+                    return false // Load in WebView
                 }
+
+                // External links - open in browser
                 url?.let {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
                     startActivity(intent)
@@ -854,9 +862,17 @@ class WebViewActivity : AppCompatActivity() {
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                    if (url?.startsWith(baseUrl) == true) {
-                        return false
+                    // Extract base URL (scheme + host + port) to compare
+                    val baseUri = Uri.parse(baseUrl)
+                    val urlUri = Uri.parse(url)
+
+                    // Check if same host - allow all navigation within same domain
+                    val sameHost = urlUri?.host == baseUri?.host
+                    if (sameHost) {
+                        return false // Load in WebView
                     }
+
+                    // External links - open in browser
                     url?.let {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
                         startActivity(intent)
