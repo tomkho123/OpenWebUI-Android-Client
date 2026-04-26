@@ -97,6 +97,45 @@ class WebViewActivity : AppCompatActivity() {
     private var pendingCameraCapture = false
     private var pendingMicrophoneAccess = false
 
+    // Offline cache & Service
+    private lateinit var offlineCache: OfflineCacheDatabase
+    private var isServiceBound = false
+    private var foregroundService: WebViewForegroundService? = null
+    private val serviceConnection = object : android.content.ServiceConnection {
+        override fun onServiceConnected(name: android.content.ComponentName?, service: IBinder?) {
+            val binder = service as WebViewForegroundService.LocalBinder
+            foregroundService = binder.getService()
+            isServiceBound = true
+            Log.d("WebViewActivity", "Foreground service connected")
+        }
+
+        override fun onServiceDisconnected(name: android.content.ComponentName?) {
+            isServiceBound = false
+            foregroundService = null
+            Log.d("WebViewActivity", "Foreground service disconnected")
+        }
+    }
+
+    // Network change receiver
+    private val networkChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                "com.maticcm.openwebuiclient.NETWORK_AVAILABLE" -> {
+                    Log.d("WebViewActivity", "Network available - reconnecting")
+                    // Auto reconnect when network is back
+                    if (isWebViewReady) {
+                        reloadPage()
+                    }
+                }
+                "com.maticcm.openwebuiclient.NETWORK_LOST" -> {
+                    Log.d("WebViewActivity", "Network lost - showing offline message")
+                    // Show offline indicator
+                    showOfflineIndicator()
+                }
+            }
+        }
+    }
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -173,12 +212,21 @@ class WebViewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         // Initialize WebView settings globally for better performance
         WebView.enableSlowWholeDocumentDraw()
-        
+
         binding = ActivityWebviewBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Initialize offline cache database
+        offlineCache = OfflineCacheDatabase(this)
+
+        // Start foreground service for background connection
+        WebViewForegroundService.startService(this, baseUrl)
+
+        // Register network change receiver
+        registerNetworkChangeReceiver()
 
         // Request microphone permission immediately
         if (!checkMicrophonePermission()) {
@@ -218,7 +266,13 @@ class WebViewActivity : AppCompatActivity() {
             setSupportZoom(true)
             builtInZoomControls = true
             displayZoomControls = false
-            cacheMode = WebSettings.LOAD_DEFAULT
+
+            // Enhanced cache settings for offline support
+            cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+            setAppCacheEnabled(true)
+            setAppCachePath(cacheDir.absolutePath)
+            setDomStorageEnabled(true)
+
             // Note: These settings are deprecated but still needed for some functionality
             @Suppress("DEPRECATION")
             allowFileAccessFromFileURLs = true
@@ -373,6 +427,7 @@ class WebViewActivity : AppCompatActivity() {
                 Log.d("WebViewActivity", "WebView loaded: $url")
                 injectImageHandlingScript()
                 injectLinkHandlingScript()
+                injectFontSizeReducer()
                 
                 // Inject JavaScript to handle microphone access
                 val microphoneScript = """
@@ -806,6 +861,7 @@ class WebViewActivity : AppCompatActivity() {
                     Log.d("WebViewActivity", "WebView loaded: $url")
                     injectImageHandlingScript()
                     injectLinkHandlingScript()
+                    injectFontSizeReducer()
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
@@ -1213,5 +1269,97 @@ class WebViewActivity : AppCompatActivity() {
 
     private fun requestMicrophonePermission() {
         requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    private fun injectFontSizeReducer() {
+        val javascript = """
+            (function() {
+                window.Android.log('Reducing font size by 5%%');
+
+                // Reduce font size by 5%% for all elements
+                const style = document.createElement('style');
+                style.innerHTML = `
+                    * {
+                        font-size: 95%% !important;
+                    }
+                `;
+                document.head.appendChild(style);
+
+                // Apply to body as well
+                document.body.style.fontSize = '95%%';
+
+                window.Android.log('Font size reduced successfully');
+            })();
+        """.trimIndent()
+        binding.webView.evaluateJavascript(javascript, null)
+    }
+
+    private fun registerNetworkChangeReceiver() {
+        val filter = IntentFilter().apply {
+            addAction("com.maticcm.openwebuiclient.NETWORK_AVAILABLE")
+            addAction("com.maticcm.openwebuiclient.NETWORK_LOST")
+        }
+        registerReceiver(networkChangeReceiver, filter)
+    }
+
+    private fun showOfflineIndicator() {
+        val javascript = """
+            (function() {
+                // Create offline indicator
+                const indicator = document.createElement('div');
+                indicator.id = 'offline-indicator';
+                indicator.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    background: #ff9800;
+                    color: white;
+                    text-align: center;
+                    padding: 10px;
+                    z-index: 999999;
+                    font-size: 14px;
+                    font-weight: bold;
+                `;
+                indicator.textContent = '⚠️ You are offline. Waiting for connection...';
+
+                // Remove existing indicator if any
+                const existing = document.getElementById('offline-indicator');
+                if (existing) {
+                    existing.remove();
+                }
+
+                document.body.appendChild(indicator);
+            })();
+        """.trimIndent()
+        binding.webView.evaluateJavascript(javascript, null)
+    }
+
+    private fun reloadPage() {
+        if (isWebViewReady) {
+            Log.d("WebViewActivity", "Reloading page after reconnection")
+            binding.webView.reload()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(networkChangeReceiver)
+        } catch (e: Exception) {
+            Log.e("WebViewActivity", "Error unregistering receiver", e)
+        }
+
+        try {
+            if (isServiceBound) {
+                unbindService(serviceConnection)
+                isServiceBound = false
+            }
+        } catch (e: Exception) {
+            Log.e("WebViewActivity", "Error unbinding service", e)
+        }
+
+        // Clear old cache data periodically (keep 7 days)
+        offlineCache.clearOldData(7)
     }
 } 
