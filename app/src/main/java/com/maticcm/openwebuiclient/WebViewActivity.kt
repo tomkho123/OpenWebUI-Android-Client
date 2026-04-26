@@ -104,10 +104,12 @@ class WebViewActivity : AppCompatActivity() {
     private var foregroundService: WebViewForegroundService? = null
     private val serviceConnection = object : android.content.ServiceConnection {
         override fun onServiceConnected(name: android.content.ComponentName?, service: IBinder?) {
-            val binder = service as WebViewForegroundService.LocalBinder
-            foregroundService = binder.getService()
-            isServiceBound = true
-            Log.d("WebViewActivity", "Foreground service connected")
+            val binder = service as? WebViewForegroundService.LocalBinder
+            if (binder != null) {
+                foregroundService = binder.getService()
+                isServiceBound = true
+                Log.d("WebViewActivity", "Foreground service connected")
+            }
         }
 
         override fun onServiceDisconnected(name: android.content.ComponentName?) {
@@ -223,8 +225,16 @@ class WebViewActivity : AppCompatActivity() {
         // Initialize offline cache database
         offlineCache = OfflineCacheDatabase(this)
 
-        // Start foreground service for background connection
-        WebViewForegroundService.startService(this, baseUrl)
+        // Get the saved URL FIRST
+        baseUrl = getSharedPreferences("AppPrefs", MODE_PRIVATE)
+            .getString("SAVED_URL", null) ?: return
+
+        // Start foreground service for background connection (AFTER baseUrl is set)
+        try {
+            WebViewForegroundService.startService(this, baseUrl)
+        } catch (e: Exception) {
+            Log.e("WebViewActivity", "Error starting foreground service", e)
+        }
 
         // Register network change receiver
         registerNetworkChangeReceiver()
@@ -233,10 +243,6 @@ class WebViewActivity : AppCompatActivity() {
         if (!checkMicrophonePermission()) {
             requestMicrophonePermission()
         }
-
-        // Get the saved URL
-        baseUrl = getSharedPreferences("AppPrefs", MODE_PRIVATE)
-            .getString("SAVED_URL", null) ?: return
 
         setupWebView()
         handleIntent(intent)
@@ -1288,11 +1294,15 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     private fun registerNetworkChangeReceiver() {
-        val filter = IntentFilter().apply {
-            addAction("com.maticcm.openwebuiclient.NETWORK_AVAILABLE")
-            addAction("com.maticcm.openwebuiclient.NETWORK_LOST")
+        try {
+            val filter = IntentFilter().apply {
+                addAction("com.maticcm.openwebuiclient.NETWORK_AVAILABLE")
+                addAction("com.maticcm.openwebuiclient.NETWORK_LOST")
+            }
+            registerReceiver(networkChangeReceiver, filter)
+        } catch (e: Exception) {
+            Log.e("WebViewActivity", "Error registering network receiver", e)
         }
-        registerReceiver(networkChangeReceiver, filter)
     }
 
     private fun showOfflineIndicator() {
