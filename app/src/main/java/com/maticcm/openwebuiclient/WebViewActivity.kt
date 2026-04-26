@@ -1257,19 +1257,19 @@ class WebViewActivity : AppCompatActivity() {
     private fun injectFontSizeReducer() {
         val javascript = """
             (function() {
-                window.Android.log('Reducing font size by 5%%');
+                window.Android.log('Reducing font size by 10%%');
 
-                // Reduce font size by 5%% for all elements
+                // Reduce font size by 10%% for all elements (5%% + 5%% = 10%% total)
                 const style = document.createElement('style');
                 style.innerHTML = `
                     * {
-                        font-size: 95%% !important;
+                        font-size: 90%% !important;
                     }
                 `;
                 document.head.appendChild(style);
 
                 // Apply to body as well
-                document.body.style.fontSize = '95%%';
+                document.body.style.fontSize = '90%%';
 
                 window.Android.log('Font size reduced successfully');
             })();
