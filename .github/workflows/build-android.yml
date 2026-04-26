@@ -1,0 +1,66 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build Release APK
+      run: ./gradlew assembleRelease --stacktrace
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --stacktrace
+
+    - name: Sign APK (Release)
+      id: sign_apk
+      run: |
+        if [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+          echo "APK found, renaming..."
+          cp app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/OpenWebUI-Client-release-unsigned.apk
+        fi
+
+        # Copy all APKs to a known location
+        mkdir -p apk-artifacts
+        cp app/build/outputs/apk/**/*.apk apk-artifacts/ 2>/dev/null || true
+        cp app/build/outputs/apk/release/*.apk apk-artifacts/ 2>/dev/null || true
+        cp app/build/outputs/apk/debug/*.apk apk-artifacts/ 2>/dev/null || true
+        ls -la apk-artifacts/
+
+    - name: Upload APK artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: OpenWebUI-Android-APK
+        path: app/build/outputs/apk/
+        retention-days: 30
+
+    - name: Create Release Summary
+      run: |
+        echo "## 🎉 Build Successful!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📱 APK Files Built:" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        ls -lh app/build/outputs/apk/**/**/*.apk 2>/dev/null || ls -lh app/build/outputs/apk/*/*.apk 2>/dev/null
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 Download:" >> $GITHUB_STEP_SUMMARY
+        echo "Check the 'Artifacts' section below to download the APK files." >> $GITHUB_STEP_SUMMARY
